@@ -1,0 +1,35 @@
+service: s3-upload-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  environment: 
+    BUCKET_NAME: s3-upload-object-bucket
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+      Resource: "arn:aws:s3:::s3-upload-object-bucket/*"
+
+functions:
+  getSignedUrl: 
+    handler: handler.getSignedUrl
+    events: 
+      - http:
+          path: generateUrl
+          method: get
+          cors: true
+
+resources:
+  Resources:
+    UploadsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: s3-upload-object-bucket
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins: ["*"]
+              AllowedHeaders: ["*"]
+              AllowedMethods: ["PUT", "GET"]
