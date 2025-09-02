@@ -1,30 +1,81 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl as generateSignedUrl } from "@aws-sdk/s3-request-presigner";
+import {
+    CognitoIdentityProviderClient,
+    SignUpCommand,
+    InitiateAuthCommand,
+    ConfirmSignUpCommand
+} from "@aws-sdk/client-cognito-identity-provider";
 
-const s3 = new S3Client({ region: process.env.AWS_REGION });
-export const getSignedUrl = async (event) => {
+const client = new CognitoIdentityProviderClient({ region: "us-east-1" });
+
+export const signUp = async (event) => {
+    const { email, password } = JSON.parse(event.body);
+
     try {
-        const fileName = event.queryStringParameters?.fileName;
-        const contentType = event.queryStringParameters?.contentType;
-
-        const command = new PutObjectCommand({
-            Bucket: process.env.BUCKET_NAME,
-            Key: fileName,
-            ContentType: contentType,
+        const command = new SignUpCommand({
+            ClientId: process.env.CLIENT_ID,
+            Username: email,
+            Password: password,
+            UserAttributes: [{ Name: "email", Value: email }],
         });
 
-        const signedUrl = await generateSignedUrl(s3, command, { expiresIn: 60 });
+        const response = await client.send(command);
+
+        return {
+            statusCode: 200, 
+            body: JSON.stringify({ message: "User registered", response }),
+        }
+    } catch(err) {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: err.message }),
+        } 
+    }
+}
+
+export const confirmSignUp = async (event) => {
+    const { email, code } = JSON.parse(event.body);
+
+    try {
+        const command = new ConfirmSignUpCommand({
+            ClientId: process.env.CLIENT_ID,
+            Username: email,
+            ConfirmationCode: code,
+        });
+
+        const response = await client.send(command);
+        
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ message: "User confirmed", response }),
+        }
+    } catch(err) {
+         return {
+            statusCode: 400,
+            body: JSON.stringify({ error: err.message }),
+        }
+    }
+}
+
+export const login = async (event) => {
+    const { email, password } = JSON.parse(event.body);
+
+    try {
+        const command = new InitiateAuthCommand({
+            AuthFlow: "USER_PASSWORD_AUTH",
+            ClientId: process.env.CLIENT_ID,
+            AuthParameters: { USERNAME: email, PASSWORD: password },
+        });
+
+        const response = await client.send(command);
 
         return {
             statusCode: 200,
-            headers: { "Access-Control-Allow-Origin": "*" },
-            body: JSON.stringify({ uploadUrl: signedUrl }),
+            body: JSON.stringify({ message: "Login succesful", tokens: response.AuthenticationResult }),
         };
-    } catch(error) {
-        console.error(error);
+    } catch(err) {
         return {
-            statusCode: 500,
-            body: JSON.stringify({ error: "Not signed url" }),
+            statusCode: 400,
+            body: JSON.stringify({ error: err.message }),
         };
     }
-} 
+}

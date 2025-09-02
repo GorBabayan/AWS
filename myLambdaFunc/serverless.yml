@@ -1,35 +1,66 @@
-service: s3-upload-service
+service: aws-service
 
 provider:
   name: aws
   runtime: nodejs18.x
   region: us-east-1
-  environment: 
-    BUCKET_NAME: s3-upload-object-bucket
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - s3:PutObject
-        - s3:GetObject
-      Resource: "arn:aws:s3:::s3-upload-object-bucket/*"
+  stage: dev
+  environment:
+    CLIENT_ID: "1eu765puvpk9fho3qnaj8ojrpd"  
 
 functions:
-  getSignedUrl: 
-    handler: handler.getSignedUrl
+  signUp: 
+    handler: handler.signUp
     events: 
       - http:
-          path: generateUrl
-          method: get
+          path: signUp
+          method: post
+          cors: true
+  confirmSignUp:
+    handler: handler.confirmSignUp
+    events:
+      - http:
+          path: confirmSignUp
+          method: post
+          cors: true
+  login:
+    handler: handler.login
+    events:
+      - http:
+          path: login
+          method: post
           cors: true
 
 resources:
   Resources:
-    UploadsBucket:
-      Type: AWS::S3::Bucket
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
       Properties:
-        BucketName: s3-upload-object-bucket
-        CorsConfiguration:
-          CorsRules:
-            - AllowedOrigins: ["*"]
-              AllowedHeaders: ["*"]
-              AllowedMethods: ["PUT", "GET"]
+        UserPoolName: my-pool
+        AutoVerifiedAttributes: 
+          - email
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 6
+            RequireUppercase: true
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: false
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: my-pool-client
+        UserPoolId: !Ref CognitoUserPool
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+          - ALLOW_USER_SRP_AUTH
+
+  Outputs:  
+    UserPoolId:
+      Description: Cognito User Pool ID
+      Value: !Ref CognitoUserPool
+    UserPoolClientId:
+      Description: Cognito App Client ID
+      Value: !Ref CognitoUserPoolClient
