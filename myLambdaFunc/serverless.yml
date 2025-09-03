@@ -6,7 +6,15 @@ provider:
   region: us-east-1
   stage: dev
   environment:
-    CLIENT_ID: "1eu765puvpk9fho3qnaj8ojrpd"  
+    CLIENT_ID: !GetAtt CognitoUserPoolClient.ClientId 
+    USERS_TABLE: !Ref UsersTable
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action: 
+        - dynamodb:PutItem
+        - dynamodb:GetItem
+      Resource: !GetAtt UsersTable.Arn
+
 
 functions:
   signUp: 
@@ -57,6 +65,19 @@ resources:
           - ALLOW_REFRESH_TOKEN_AUTH
           - ALLOW_USER_SRP_AUTH
 
+    UsersTable: 
+      Type: AWS::DynamoDB::Table  
+      Properties:
+        TableName: UsersTable
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+
   Outputs:  
     UserPoolId:
       Description: Cognito User Pool ID
@@ -64,3 +85,6 @@ resources:
     UserPoolClientId:
       Description: Cognito App Client ID
       Value: !Ref CognitoUserPoolClient
+    UsersTableName:
+      Description: Users DynamoDB Table Name
+      Value: !Ref UsersTable
