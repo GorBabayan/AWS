@@ -13,8 +13,10 @@ provider:
       Action: 
         - dynamodb:PutItem
         - dynamodb:GetItem
-      Resource: !GetAtt UsersTable.Arn
-
+        - dynamodb:Query
+      Resource: 
+        - !GetAtt UsersTable.Arn
+        - !Sub "${UsersTable.Arn}/index/EmailIndex"
 
 functions:
   signUp: 
@@ -24,6 +26,7 @@ functions:
           path: signUp
           method: post
           cors: true
+
   confirmSignUp:
     handler: handler.confirmSignUp
     events:
@@ -31,6 +34,7 @@ functions:
           path: confirmSignUp
           method: post
           cors: true
+
   login:
     handler: handler.login
     events:
@@ -38,6 +42,18 @@ functions:
           path: login
           method: post
           cors: true
+
+  authenticate:
+    handler: handler.authenticate
+    events:
+      - http: 
+          path: authenticate
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            name: CognitoAuthorizer
+            arn: !GetAtt CognitoUserPool.Arn
 
 resources:
   Resources:
@@ -54,6 +70,7 @@ resources:
             RequireLowercase: true
             RequireNumbers: true
             RequireSymbols: false
+
     CognitoUserPoolClient:
       Type: AWS::Cognito::UserPoolClient
       Properties:
@@ -70,13 +87,21 @@ resources:
       Properties:
         TableName: UsersTable
         AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
           - AttributeName: email
             AttributeType: S
         KeySchema:
-          - AttributeName: email
+          - AttributeName: id
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
-
+        GlobalSecondaryIndexes: 
+          - IndexName: EmailIndex
+            KeySchema: 
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
 
   Outputs:  
     UserPoolId:

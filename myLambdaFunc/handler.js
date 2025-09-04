@@ -1,11 +1,12 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { GetCommand, PutCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand, PutCommand, DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import {
     CognitoIdentityProviderClient,
     SignUpCommand,
     InitiateAuthCommand,
     ConfirmSignUpCommand
 } from "@aws-sdk/client-cognito-identity-provider";
+import { v4 as uuidv4 } from "uuid";
 
 
 const client = new CognitoIdentityProviderClient({ region: "us-east-1" });
@@ -25,13 +26,16 @@ export const signUp = async (event) => {
 
         const response = await client.send(command);
 
+        const userId = uuidv4();
+
         const putCommand = new PutCommand({
             TableName: process.env.USERS_TABLE,
             Item: {
+                id: userId,
                 email,
                 firstName,
                 lastName,
-                role: "user",
+                role: role || "user",
                 language: language || "en",
                 nationality: nationality || "unknown",
             }
@@ -88,9 +92,11 @@ export const login = async (event) => {
 
         const response = await client.send(command);
 
-        const getUserCommand = new GetCommand({
+        const getUserCommand = new QueryCommand({
             TableName: process.env.USERS_TABLE,
-            Key: { email: email },
+            IndexName: "EmailIndex",
+            KeyConditionExpression: "email = :e",
+            ExpressionAttributeValues: { ":e": email }
         });
 
         const userResult = await docClient.send(getUserCommand);
@@ -100,7 +106,7 @@ export const login = async (event) => {
             body: JSON.stringify({ 
                 message: "Login successful", 
                 tokens: response.AuthenticationResult,
-                user: userResult.Item || {},
+                user: userResult.Items?.[0] || {},
             }),
         };
     } catch(err) {
@@ -109,5 +115,35 @@ export const login = async (event) => {
             statusCode: 400,
             body: JSON.stringify({ error: err.message }),
         };
+    }
+}
+
+export const authenticate = async (event) => {
+    const claims = event.requestContext.authorizer.claims;
+    const email = claims.email;
+
+    try {
+        const getUserCommand = new QueryCommand({
+            TableName: process.env.USERS_TABLE,
+            IndexName: "EmailIndex",
+            KeyConditionExpression: "email = :e",
+            ExpressionAttributeValues: { ":e": email }
+        });
+
+        const userResult = await docClient.send(getUserCommand);
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: `${claims.email} is authenticated`,
+                user: userResult.Items?.[0] || {},
+            }),
+        }
+    } catch(err) {
+        console.error("Authenticate error", err);
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ error: err.message }),
+        }
     }
 }
