@@ -1,0 +1,115 @@
+service: aws-service
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: dev
+  environment:
+    CLIENT_ID: !GetAtt CognitoUserPoolClient.ClientId 
+    USERS_TABLE: !Ref UsersTable
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action: 
+        - dynamodb:PutItem
+        - dynamodb:GetItem
+        - dynamodb:Query
+      Resource: 
+        - !GetAtt UsersTable.Arn
+        - !Sub "${UsersTable.Arn}/index/EmailIndex"
+
+functions:
+  signUp: 
+    handler: handler.signUp
+    events: 
+      - http:
+          path: signUp
+          method: post
+          cors: true
+
+  confirmSignUp:
+    handler: handler.confirmSignUp
+    events:
+      - http:
+          path: confirmSignUp
+          method: post
+          cors: true
+
+  login:
+    handler: handler.login
+    events:
+      - http:
+          path: login
+          method: post
+          cors: true
+
+  authenticate:
+    handler: handler.authenticate
+    events:
+      - http: 
+          path: authenticate
+          method: get
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            name: CognitoAuthorizer
+            arn: !GetAtt CognitoUserPool.Arn
+
+resources:
+  Resources:
+    CognitoUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: my-pool
+        AutoVerifiedAttributes: 
+          - email
+        Policies:
+          PasswordPolicy:
+            MinimumLength: 6
+            RequireUppercase: true
+            RequireLowercase: true
+            RequireNumbers: true
+            RequireSymbols: false
+
+    CognitoUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: my-pool-client
+        UserPoolId: !Ref CognitoUserPool
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ALLOW_USER_PASSWORD_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+          - ALLOW_USER_SRP_AUTH
+
+    UsersTable: 
+      Type: AWS::DynamoDB::Table  
+      Properties:
+        TableName: UsersTable
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        GlobalSecondaryIndexes: 
+          - IndexName: EmailIndex
+            KeySchema: 
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+  Outputs:  
+    UserPoolId:
+      Description: Cognito User Pool ID
+      Value: !Ref CognitoUserPool
+    UserPoolClientId:
+      Description: Cognito App Client ID
+      Value: !Ref CognitoUserPoolClient
+    UsersTableName:
+      Description: Users DynamoDB Table Name
+      Value: !Ref UsersTable
