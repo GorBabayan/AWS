@@ -1,12 +1,73 @@
-service: my-lambda
-
-frameworkVersion: "4"
+service: s3-upload-service
 
 provider:
   name: aws
   runtime: nodejs18.x
-  region: eu-west-1
+  region: us-east-1
+  environment: 
+    BUCKET_NAME: s3-upload-object-bucket    
+    QUEUE_ARN: 
+      Fn::GetAtt: [ ImageQueue, Arn ]
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+        - s3:PutBucketNotification
+      Resource:
+        - "arn:aws:s3:::s3-upload-object-bucket"
+        - "arn:aws:s3:::s3-upload-object-bucket/*"
+
+    - Effect: Allow
+      Action:
+        - sqs:ReceiveMessage
+        - sqs:DeleteMessage
+        - sqs:GetQueueAttributes
+      Resource:
+        - Fn::GetAtt: [ ImageQueue, Arn ]
 
 functions:
-  hello:
-    handler: handler.hello
+  getSignedUrl: 
+    handler: handler.getSignedUrl
+    events: 
+      - http:
+          path: generateUrl
+          method: get
+          cors: true
+
+  resizeImage:
+    handler: resize.resizeImage
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [ ImageQueue, Arn ]
+          batchSize: 1
+          enabled: true
+  
+  setupNotification:
+    handler: setup.setupNotification   
+
+resources:
+  Resources:
+    ImageQueue:
+      Type: AWS::SQS::Queue  
+      Properties:
+        QueueName: s3-upload-event
+
+    S3ToSqsPolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - Ref: ImageQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: s3.amazonaws.com
+              Action: SQS:SendMessage
+              Resource: !GetAtt ImageQueue.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: arn:aws:s3:::s3-upload-object-bucket

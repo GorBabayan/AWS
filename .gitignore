@@ -1,6 +1,5 @@
-# package directories
-node_modules
-jspm_packages
-
-# Serverless directories
+node_modules/
+package.json
+package-lock.json
+test.png
 .serverless
