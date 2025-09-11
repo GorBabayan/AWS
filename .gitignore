@@ -3,3 +3,4 @@ package.json
 package-lock.json
 test.png
 .serverless
+.idea
